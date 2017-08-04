@@ -21,8 +21,6 @@ namespace Klarna\Rest\Transport;
 
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\RequestException;
-use GuzzleHttp\Message\RequestInterface;
-use GuzzleHttp\Message\ResponseInterface;
 use Klarna\Rest\Transport\Exception\ConnectorException;
 
 /**
@@ -76,7 +74,7 @@ interface ConnectorInterface
      *
      * @return ResponseInterface
      */
-    public function send(RequestInterface $request);
+    public function send($request);
 
     /**
      * Gets the HTTP transport client.

@@ -22,8 +22,6 @@ namespace Klarna\Rest\Transport;
 use GuzzleHttp\Client;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\RequestException;
-use GuzzleHttp\Message\RequestInterface;
-use GuzzleHttp\Message\ResponseInterface;
 use Klarna\Rest\Transport\Exception\ConnectorException;
 
 /**
@@ -61,6 +59,13 @@ class Connector implements ConnectorInterface
     protected $userAgent;
 
     /**
+     * Tmp. holding area until send() call for Guzzle > v6.0
+     *
+     * @var array
+     */
+    protected $requestOptions;
+
+    /**
      * Constructs a connector instance.
      *
      * Example usage:
@@ -91,7 +96,8 @@ class Connector implements ConnectorInterface
     }
 
     /**
-     * Creates a request object.
+     * Creates a request object. If Guzzle >= 6.0.0
+     * mimic Guzzle v5.3 MessageFactory::createRequest()
      *
      * @param string $url     URL
      * @param string $method  HTTP method
@@ -101,10 +107,33 @@ class Connector implements ConnectorInterface
      */
     public function createRequest($url, $method = 'GET', array $options = [])
     {
+        $this->requestOptions = null;
+
         $options['auth'] = [$this->merchantId, $this->sharedSecret];
         $options['headers']['User-Agent'] = strval($this->userAgent);
 
-        return $this->client->createRequest($method, $url, $options);
+        if (method_exists($this->client, 'createRequest')) {
+            return $this->client->createRequest($url, $method, $options);
+        } else {
+            if (isset($options['version'])) {
+                $options['config']['protocol_version'] = $options['version'];
+                unset($options['version']);
+            }
+            $request = new \GuzzleHttp\Psr7\Request($method, $url, [], null,
+                isset($options['config']) ? $options['config'] : []);
+            unset($options['config']);
+
+            if (strtoupper($method) == 'POST'
+                && !isset($options['body'])
+                && !isset($options['json'])
+            ) {
+                $options['body'] = [];
+            }
+            if ($options) {
+                $this->requestOptions = $options;
+            }
+            return $request;
+        }
     }
 
     /**
@@ -118,18 +147,24 @@ class Connector implements ConnectorInterface
      *
      * @return ResponseInterface
      */
-    public function send(RequestInterface $request)
+    public function send($request)
     {
         try {
-            return $this->client->send($request);
+            if (method_exists($this->client, 'createRequest')) {
+                return $this->client->send($request);
+            } else {
+                return $this->client->send($request, $this->requestOptions);
+            }
         } catch (RequestException $e) {
             if (!$e->hasResponse()) {
                 throw $e;
             }
 
             $response = $e->getResponse();
+            $contentType = $response->getHeader('Content-Type');
+            $contentType = is_array($contentType) ? reset($contentType) : $contentType;
 
-            if ($response->getHeader('Content-Type') !== 'application/json') {
+            if ($contentType !== 'application/json') {
                 throw $e;
             }
 
@@ -179,7 +214,7 @@ class Connector implements ConnectorInterface
         $baseUrl = self::EU_BASE_URL,
         UserAgentInterface $userAgent = null
     ) {
-        $client = new Client(['base_url' => $baseUrl]);
+        $client = new Client(['base_url' => $baseUrl, 'base_uri' => $baseUrl]);
 
         return new static($client, $merchantId, $sharedSecret, $userAgent);
     }
