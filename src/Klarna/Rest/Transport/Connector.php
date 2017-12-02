@@ -168,7 +168,7 @@ class Connector implements ConnectorInterface
                 throw $e;
             }
 
-            $data = $response->json();
+            $data = json_decode($response->getBody());
 
             if (!is_array($data) || !array_key_exists('error_code', $data)) {
                 throw $e;
