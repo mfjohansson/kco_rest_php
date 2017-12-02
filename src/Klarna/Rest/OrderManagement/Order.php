@@ -113,7 +113,7 @@ class Order extends Resource
      */
     public function acknowledge()
     {
-        $this->post($this->getLocation() . '/acknowledge')
+        $this->post($this->getLocation() . '/acknowledge', [])
             ->status('204');
 
         return $this;
